@@ -19,6 +19,19 @@ async def on_ready():
     channel = bot.get_channel(CHANNEL_ID)
     await channel.send("Study Bot activated! (Test)")
 
+@bot.command()
+async def draw(ctx):
+    # draw role 
+    # 1) get the user or user id who executing this command
+    user = ctx.author
+    user_id = user.id
+
+    # 2) send private message to this player
+    send_private_message( user, "Hi This is private message test")
+
+async def send_private_message(user, message):
+    dm_channel = await user.create_dm()
+    await dm_channel.send(message)
 
 if __name__ == '__main__':
     bot.run(BOT_TOKEN)
