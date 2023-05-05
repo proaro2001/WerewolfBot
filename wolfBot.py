@@ -84,7 +84,7 @@ async def draw(ctx):
     # 2) assign player a random role
     assign_random_role(user)
     # 3) send private message to this player
-    await send_private_message( user, "Hi ")
+    await send_private_message( user,  gameState)
 
 ###############################################
 #              helper methods
