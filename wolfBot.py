@@ -17,7 +17,7 @@ async def on_ready():
     # channel ID is needed
     # not sure if we could create a new one and extract it's channel ID tho
     channel = bot.get_channel(CHANNEL_ID)
-    # await channel.send("Study Bot activated! (Test)")
+    await channel.send("Study Bot activated! (Test)")
 
 
 if __name__ == '__main__':
