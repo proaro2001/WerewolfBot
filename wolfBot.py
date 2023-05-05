@@ -93,8 +93,12 @@ async def draw(ctx):
 ###############################################
 #              helper methods
 ###############################################
-# helper method to assign random role
+# assign random role to players
 async def assign_random_role( user ):
+    """
+    Assign random role to user
+    Check available spot and if the player joined the event
+    """
     # get the list of remainding roles
     remainding_role = await get_remainding_role()
     # when no more role left
