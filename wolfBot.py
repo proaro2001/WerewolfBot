@@ -24,10 +24,8 @@ async def draw(ctx):
     # draw role 
     # 1) get the user or user id who executing this command
     user = ctx.author
-    user_id = user.id
-
     # 2) send private message to this player
-    send_private_message( user, "Hi This is private message test")
+    await send_private_message( user, "Hi ")
 
 async def send_private_message(user, message):
     dm_channel = await user.create_dm()
