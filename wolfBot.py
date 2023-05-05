@@ -2,8 +2,11 @@ BOT_TOKEN = "MTEwMzg3NDcyNjIwMTQwNTU4MA.GYTYnE.Kd71rBAZowAm76j77NycXEKsnV4Q04xzf
 CHANNEL_ID = 1100690193012506635
 
 from discord.ext import commands
+from gtts import gTTS
+from io import BytesIO
 import discord
 import random
+import asyncio
 
 # declare variables
 command_prefix = "/"                # what should the command start with
@@ -20,7 +23,7 @@ gameState = {
     "Werewolf1": None,
     "Werewolf2": None
 }
-
+client = commands.Bot(command_prefix='/')
 bot = commands.Bot(command_prefix=command_prefix, intents=intents)
 
 @bot.event
@@ -34,48 +37,57 @@ async def on_ready():
 
 @bot.command()
 async def join(ctx):
-    """
-    Creates a poll for users to join a game
-    """
     # Define the poll message
-    poll_message = "React with 👍 to join the game!"
-    
+    poll_message = "React with 👍 to join the game! Type 'stop' or react with 🚫 to stop joining."
+
     # Send the poll message to the channel
     poll = await ctx.send(poll_message)
-    
-    # Add the 👍 reaction to the poll message
+
+    # Add the 👍 and 🚫 reactions to the poll message
     await poll.add_reaction("👍")
-    
-    # Wait for reactions to be added to the poll message
+    await poll.add_reaction("🚫")
+
+    # Wait for reactions or messages to be added to the poll message
     def check(reaction, user):
         # The check function takes two parameters: reaction and user
-        # It returns True if the reaction is the thumbs-up emoji and the user is not the bot
-        return str(reaction.emoji) == "👍" and user != bot.user
-    
-    # Continuously wait for reactions to be added to the poll message
-    while True:
-        try:
-            # Wait for a reaction that meets the conditions in the check function
-            reaction, user = await bot.wait_for('reaction_add', check=check)
-            # If the user is not already in the list of players, add them
-            if user not in players:
-                players.append(user)
-                # Get the user's direct message ID and name in the channel
-                dm_channel = await user.create_dm()
-                dm_id = dm_channel.id
-                username = user.display_name
-                
-                # Send a confirmation message to the user's direct message channel
-                confirmation_message = f"Thanks for joining the game, {username}! Your direct message ID is {dm_id}."
-                await dm_channel.send(confirmation_message)
-                
-                # Print debug messages
-                print(f"{username} has joined the game!")
-                print(f"Direct message ID: {dm_id}")
-        except:
-            # If an exception occurs, stop waiting for reactions and exit the loop
-            break
+        # It returns True if the reaction is the thumbs-up or stop emoji and the user is not the bot
+        return str(reaction.emoji) in ["👍", "🚫"] and user != bot.user
 
+    # This loop waits for a reaction or message to be added to the poll message that meets the conditions in the check function
+    join_ended = False
+    while not join_ended:
+        try:
+            reaction, user = await bot.wait_for('reaction_add', check=check, timeout=30)
+            if str(reaction.emoji) == "👍":
+                players.append(user)
+                await ctx.send(f"{user.name} has joined the game!")
+            elif str(reaction.emoji) == "🚫":
+                await ctx.send(f"{user.name} has stopped joining the game.")
+                join_ended = True
+        except asyncio.TimeoutError:
+            await ctx.send("Time's up! The join period has ended.")
+            join_ended = True
+
+
+@bot.command()
+async def say(ctx, *, message):
+    await ctx.send(message, tts=True)
+
+
+###############################################
+@bot.command()
+async def end(ctx):
+    await clear()
+
+async def clear():
+    """
+    clear the memory of GameState and players
+    """
+    players.empty()                 # empty the player list
+    for key in gameState.keys():    # set all users to None again
+        gameState[key] = None
+
+###############################################
 @bot.command()
 async def draw(ctx):
     # draw role 
@@ -87,12 +99,11 @@ async def draw(ctx):
         return
     # 2) assign player a random role
     await assign_random_role(user)
+    print ( "assigned plyer a andom rol" )
     # 3) send private message to this player
-    await send_private_message( user,  gameState)
+    str_gameState = await getGameStateStr()
+    await send_private_message( user,  str_gameState )
 
-###############################################
-#              helper methods
-###############################################
 # assign random role to players
 async def assign_random_role( user ):
     """
@@ -132,6 +143,15 @@ async def send_private_message(user, message):
     dm_channel = await user.create_dm()
     await dm_channel.send(message)
 
+async def getGameStateStr():
+    """
+    print the GameState in human readable format
+    """
+    gameStateStr = ''
+    for key, value in gameState.items():
+        gameStateStr += f"{key} : {value} \n"
+    return gameStateStr
+    # end of printGameState()
+
 if __name__ == '__main__':
     bot.run(BOT_TOKEN)
-
