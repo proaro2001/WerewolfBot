@@ -81,8 +81,12 @@ async def draw(ctx):
     # draw role 
     # 1) get the user or user id who executing this command
     user = ctx.author
+    if not players or user not in players:
+        print( "User didn't join event")
+        await send_private_message( user, "Player didn't join event! Please Join the event to draw roles" )
+        return
     # 2) assign player a random role
-    assign_random_role(user)
+    await assign_random_role(user)
     # 3) send private message to this player
     await send_private_message( user,  gameState)
 
@@ -92,16 +96,17 @@ async def draw(ctx):
 # helper method to assign random role
 async def assign_random_role( user ):
     # get the list of remainding roles
-    remainding_role = get_remainding_role()
+    remainding_role = await get_remainding_role()
     # when no more role left
     if not remainding_role:
         print( "No more roles" ) # debug message
-        send_private_message(user, "No more seats")
+        await send_private_message(user, "No more seats")
         return
     # when user already exist
     if user in gameState.values():
         print( "Player already enrolled" )
-        send_private_message(user, "You already have a role")
+        await send_private_message(user, "You already have a role")
+        return
     # pick a random role 
     random_num = random.randint( 0, len(remainding_role) ) # get a random number
     random_role = remainding_role[random_num] # The role store in the gameState, :key
@@ -114,7 +119,7 @@ async def get_remainding_role():
     """
     remainding_role = []
     for role in gameState:
-        if gameState[role] is not None:
+        if gameState[role] is None:
             remainding_role.append(role)
     return remainding_role
 
