@@ -82,7 +82,7 @@ async def draw(ctx):
     # 1) get the user or user id who executing this command
     user = ctx.author
     # 2) assign player a random role
-
+    assign_random_role(user)
     # 3) send private message to this player
     await send_private_message( user, "Hi ")
 
