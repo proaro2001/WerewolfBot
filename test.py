@@ -32,49 +32,16 @@ event_called = False # bool value to check if /event executing, /end function tu
 @bot.event
 async def on_ready():
     print("Werewolf Bot activated!")
+    # trying to send a message in specific channel
+    # channel ID is needed
+    # not sure if we could create a new one and extract it's channel ID tho
     channel = bot.get_channel(CHANNEL_ID)
     await channel.send("WereWolf Bot activated!")
 
 ###############################################
 @bot.command()
-async def join(ctx):
-
-     # Wait for reactions or messages to be added to the poll message
-    def check(reaction, user):
-        # The check function takes two parameters: reaction and user
-        # It returns True if the reaction is the thumbs-up or stop emoji and the user is not the bot
-        return str(reaction.emoji) in ["👍", "🚫"] and user != bot.user
-
-    global event_called
-    if event_called:
-        print("Event called before")
-        await ctx.send("Event command can only be called once. Please /end the previous event to start a new event")
-        return
-
-    # Define the poll message
-    poll_message = "React with 👍 to join the game! Type 'stop' or react with 🚫 to stop joining."
-
-    # Send the poll message to the channel
-    poll = await ctx.send(poll_message)
-
-    # Add the 👍 and 🚫 reactions to the poll message
-    await poll.add_reaction("👍")
-    await poll.add_reaction("🚫")
-
-    # event has been called
-    event_called = True
-
-    while event_called:
-            reaction, user = await bot.wait_for('reaction_add', check=check)
-            if str(reaction.emoji) == "👍":
-                await add_player(user)
-                await ctx.send(f"{user.name} has joined the game!")
-            elif str(reaction.emoji) == "🚫":
-                await ctx.send(f"{user.name} has stopped joining the game.")
-                
-###############################################
-@bot.command()
 async def event(ctx, event_title, event_time, event_location, *note):
+
     async def add_reaction_to_msg( msg, reactions=["👍","👎"] ):
         """
         add reactions to a message
@@ -115,6 +82,8 @@ async def event(ctx, event_title, event_time, event_location, *note):
 
     
 
+    
+
 
 ###############################################
 @bot.command()
@@ -133,20 +102,9 @@ async def end(ctx):
     """
     global event_called
     event_called = False
-    await ctx.send( f"Names:\n{await get_name_list()}" )
+
     await clear()
-    await ctx.send("Event Ended")
-
-async def get_name_list():
-    """
-    return a name list of players in string
-    """
-    global players
-    name_list = ''
-    # name_list += (f"{i+1} :\t{players[i].name}\n" for i in range (0, len(players)) )
-    name_list += ''.join(f"{i+1} :\t{players[i].name}\n" for i in range(0, len(players)))
-
-    return name_list
+    ctx.send("Event Ended")
 
 async def clear():
     """
@@ -244,13 +202,11 @@ async def getGameStateStr():
 
 async def add_player ( user ):
     """add user to player list"""
-    if user not in players:
-        players.append( user )
+    players.append( user )
 
 async def remove_player ( user ):
     """remove player from a player list"""
-    if user in players:
-        players.remove( user )
+    players.remove( user )
 
 ###############################################
 @bot.event
