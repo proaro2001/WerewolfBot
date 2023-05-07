@@ -105,7 +105,7 @@ async def play( ctx, game = "werewolf"):
         time.sleep(5)
         await wolfTurn(ctx)
         time.sleep(5)
-        await witchTurn(ctx, has_Heal, has_Posion)
+        has_Heal, has_Posion = await witchTurn(ctx, has_Heal, has_Posion)
         time.sleep(5)
         await seerTurn(ctx)
         time.sleep(5)
@@ -144,6 +144,7 @@ async def play( ctx, game = "werewolf"):
 
 
 async def waitToVote(ctx, user):
+    global players
     def check(reaction, user):
         return str(reaction.emoji) in ["👍"] and user != bot.user
     
@@ -161,6 +162,7 @@ async def waitToVote(ctx, user):
 
 
 async def callVote(ctx, user, isVotedMoreThanOnce):
+    global players
     voteResult = []     # for message
     seat_freq = {}
     for player in players:
@@ -190,6 +192,7 @@ async def callVote(ctx, user, isVotedMoreThanOnce):
     
 
 async def vote(ctx, isVotedMoreThanOnce, user):
+    global players, emojis
     most_vote = await callVote(ctx, user, isVotedMoreThanOnce)
 
     if len(most_vote) > 1 and isVotedMoreThanOnce == False:
@@ -220,7 +223,7 @@ async def vote(ctx, isVotedMoreThanOnce, user):
         chosen_player = None
         # Kill the player
         for player in players:
-            if most_vote == player.seat:
+            if most_vote[0] == player.seat:
                 chosen_player = player
         emojis.remove(chosen_player.emo)
         chosen_player.death = True
@@ -229,14 +232,14 @@ async def vote(ctx, isVotedMoreThanOnce, user):
     return
 
 
-async def gatherVotes(ctx, player, isVotedMoreThanOnce):    
-    msg = f"```Player Number:  {player.emo}\n"    
+async def gatherVotes(ctx, youAreTheOneToVote, isVotedMoreThanOnce):    
+    msg = f"```Player Number:  {youAreTheOneToVote.emo}\n"    
     msg += "Please vote to player to kill or React 🚫 to not vote```"
-    dm_channel = await player.user.create_dm()
+    dm_channel = await youAreTheOneToVote.user.create_dm()
     poll = await dm_channel.send(msg)
 
     # create a temp emojis
-    global emojis
+    global emojis, players
     remaining_emojis = []
     for player in players:
         if isVotedMoreThanOnce == False:
@@ -251,36 +254,34 @@ async def gatherVotes(ctx, player, isVotedMoreThanOnce):
     for emo in remaining_emojis:
         await poll.add_reaction(emo)
 
-    # wait for pick and kill
-    def check(reaction, user):
-        return user != bot.user and str(reaction.emoji) in remaining_emojis 
 
-    reaction, player = await bot.wait_for('reaction_add', check=check)
-    chosen_player = None
-    for player in players:
-        if player.emo == str(reaction.emoji) and player.death == False:
-            chosen_player = player
-            break
+    reaction, user = await bot.wait_for('reaction_add')
+    if user != bot.user and reaction.emoji in emojis:
+        chosen_player = None
+        for player in players:
+            if player.emo == str(reaction.emoji) and player.death == False:
+                chosen_player = player
+                break
     
     msg = ""
     if str(reaction.emoji) == "🚫":
-        msg = "Okay, your vote is corrected!"
-        return_msg = f"{player.emo} ➡️ 🚫"
+        msg = "Okay, your vote is collected!"
+        return_msg = f"{youAreTheOneToVote.emo} ➡️ 🚫"
         dm_channel = await player.user.create_dm()
         await dm_channel.send(msg)
         return 0, return_msg
     else: 
         msg = "Okay, your vote is gathered and sent. Hope he/she die today!!"
-    dm_channel = await player.user.create_dm()
-    await dm_channel.send(msg)
-    return_msg = f"{player.emo} ➡️ {chosen_player.emo}"
-    return chosen_player.seat, return_msg
+        dm_channel = await youAreTheOneToVote.user.create_dm()
+        await dm_channel.send(msg)
+        return_msg = f"{youAreTheOneToVote.emo} ➡️ {chosen_player.emo}"
+        return chosen_player.seat, return_msg
 
 
 async def determineWinningState(ctx):
     wolf_count = 0
     good_count = 0
-    global isGameEnded
+    global isGameEnded, players
     for player in players:
         if player.death == False:
             if player.role.startswith("Werewolf"):
@@ -384,7 +385,8 @@ async def witchTurn(ctx, has_Heal, has_Posion):
         if user != bot.user and str(reaction.emoji) in emojis:
             chosen_player = next( player for player in players if player.emo == reaction.emoji)
             global killed
-            killed.append(chosen_player)
+            if chosen_player not in killed:
+                killed.append(chosen_player)
             return True
       
     async def action():
@@ -431,7 +433,7 @@ async def witchTurn(ctx, has_Heal, has_Posion):
     else:
         await action()
     await ctx.send(f"Ok I got it, please close your eyes", tts=True)
-    return
+    return ( has_Heal, has_Posion )
 
 async def seerTurn(ctx):
     seer = next( player for player in players if player.role == "Seer")
