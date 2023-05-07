@@ -9,50 +9,56 @@ import random
 import asyncio
 import time
 
-###############################################
-# declare variables
+
+class Player:
+    def __init__(self, user, role=None, seat=0, emo=None):
+        self.user = user
+        self.role = role
+        self.seat = seat
+        self.emo = emo
+        self.death = False
+        self.mostVote = False
+
+# Bot variables
 command_prefix = "/"                # what should the command start with
 intents = discord.Intents.all()     # Intents to use all functions
-players = []
-# gameState ( temporary ), global variable
-gameState = {
-    # Village Team
-    "Seer": None,
-    "Witch": None,
-    "Village1": None,
-    "Village2": None,
-    # Werewolf Team
-    "Werewolf1": None,
-    "Werewolf2": None
-}
-
-
 bot = commands.Bot(command_prefix=command_prefix, intents=intents)
-event_called = False # bool value to check if /event executing, /end function turns it to false 
 
-###############################################
+# Game variables
+event_called = False
+players = []
+discord_users = []
+emojis = []
+roles = []
+killed = []
+isGameEnded = False
+
+
 @bot.event
 async def on_ready():
     print("Werewolf Bot activated!")
     channel = bot.get_channel(CHANNEL_ID)
     await channel.send("WereWolf Bot activated!")
 
-###############################################
+@bot.command()
+async def test(ctx):
+    user = ctx.author
+    for i in range(6):
+        discord_users.append(user)
+    print( f"Appended {user.name} to discord_users 6 times\ndiscord_users = {discord_users}")
+
+
 @bot.command()
 async def join(ctx):
 
-     # Wait for reactions or messages to be added to the poll message
     def check(reaction, user):
-        # The check function takes two parameters: reaction and user
-        # It returns True if the reaction is the thumbs-up or stop emoji and the user is not the bot
         return str(reaction.emoji) in ["👍", "🚫"] and user != bot.user
 
     global event_called
     if event_called:
-        print("Event called before")
-        await ctx.send("Event command can only be called once. Please /end the previous event to start a new event")
+        await ctx.send("Function has been called")
         return
-
+    
     # Define the poll message
     poll_message = "React with 👍 to join the game! Type 'stop' or react with 🚫 to stop joining."
 
@@ -69,248 +75,434 @@ async def join(ctx):
     while event_called:
             reaction, user = await bot.wait_for('reaction_add', check=check)
             if str(reaction.emoji) == "👍":
-                await add_player(user)
+                discord_users.append(user)
                 await ctx.send(f"{user.name} has joined the game!")
             elif str(reaction.emoji) == "🚫":
                 await ctx.send(f"{user.name} has stopped joining the game.")
-                
-###############################################
-@bot.command()
-async def event(ctx, event_title, event_time, event_location, *note):
-    async def add_reaction_to_msg( msg, reactions=["👍","👎"] ):
-        """
-        add reactions to a message
+                event_called = False
 
-        :param msg: the message to add reactions with
-        :param reactions: list of reactions to be added with default value "👍","👎"
-        """
-        for emoji in reactions:
-            await msg.add_reaction(emoji)
-
-    async def get_note(*note):
-        """extract message from note"""
-        note_str = ''
-        for str in note:
-            note_str += str + ' '
-        return note_str
-    
-    global event_called
-    if event_called:
-        print("Event called before")
-        await ctx.send("Event command can only be called once. Please /end the previous event to start a new event")
-        return
-    
-    # note message
-    note_str = await get_note(*note)   
-
-    # Define the poll message
-    poll_message = f"```Event:\t\t{event_title}\nTime:\t\t {event_time}\nLocation:\t {event_location}\nNote:\t\t {note_str}```"
-
-    # Send the poll message to the channel
-    poll = await ctx.send(poll_message)
-
-    # add reaction to the message with defaul value
-    await add_reaction_to_msg(poll)
-
-    # set event being called
-    event_called = True
-
-###############################################
-@bot.command()
-async def end(ctx):
-    """
-    End the event
-    turn the global variable event_called to False
-    """
-    global event_called
-    if not event_called:
-        await ctx.send( "No event being hosted yet!" )
-        return
-    event_called = False
-    await ctx.send( f"Names:\n{await get_name_list()}" )
-    await clear()
-    await ctx.send("Event Ended")
-
-async def get_name_list():
-    """
-    return a name list of players in string
-    """
-    global players
-    name_list = ''
-    # name_list += (f"{i+1} :\t{players[i].name}\n" for i in range (0, len(players)) )
-    name_list += ''.join(f"{i+1} :\t{players[i].name}\n" for i in range(0, len(players)))
-
-    return name_list
-
-async def clear():
-    """
-    clear the memory of GameState and players
-    """
-    global players, gameState
-    players = []                    # empty the player list
-    for key in gameState.keys():    # set all users to None again
-        gameState[key] = None
-
-###############################################
-async def draw(user):
-    """
-    assign random role to the user
-    """
-    # draw role 
-    # 1) get the user or user id who executing this command
-    if not players or user not in players:
-        print( "User didn't join event")
-        await send_private_message( user, "Player didn't join event! Please Join the event to draw roles" )
-        return
-    # 2) assign player a random role
-    role = await assign_random_role(user)
-    print ( f"assigned {user} {role}" )
-    # 3) send private message to this player
-    if role != None:
-        await send_private_message( user,  role )
-    # debug message
-    str_gameState = await getGameStateStr()
-    print( str_gameState )
-
-# assign random role to players
-async def assign_random_role( user ):
-    """
-    Assign random role to user
-    Check available spot and if the player joined the event
-
-    :param user:            user = ctx.author
-    :return random_role:    string
-    """
-    # get the list of remainding roles
-    remainding_role = await get_remainding_role()
-    # when no more role left
-    if not remainding_role:
-        print( "No more roles" ) # debug message
-        await send_private_message(user, "No more seats")
-        return None
-    # when user already exist
-    if user in gameState.values():
-        print( "Player already enrolled" )
-        await send_private_message(user, "You already have a role")
-        return None
-    # pick a random role 
-    random_num = random.randint( 0, len(remainding_role)-1 ) # get a random number
-    random_role = remainding_role[random_num] # The role store in the gameState, :key
-    user.death_status = False
-    gameState[random_role] = user
-    return random_role
-
-# helper method to get remainding roles 
-async def get_remainding_role():
-    """
-    Return a list of remainding roles that are not being taken
-
-    :return random_role: string
-    """
-    remainding_role = []
-    for role in gameState:
-        if gameState[role] is None:
-            remainding_role.append(role)
-    return remainding_role
-
-###############################################
-
-async def send_private_message(user, message):
-    """
-    send private message to specified user
-
-    :param user: user = ctx.author
-    :param massage: string
-    """
-    dm_channel = await user.create_dm()
-    await dm_channel.send(message)
-
-async def getGameStateStr():
-    """
-    print the GameState in human readable format
-    """
-    gameStateStr = ''
-    for key, value in gameState.items():
-        gameStateStr += f"{key} : {value} \n"
-    return gameStateStr
-    # end of printGameState()
-
-async def add_player ( user ):
-    """add user to player list"""
-    if user not in players:
-        players.append( user )
-
-async def remove_player ( user ):
-    """remove player from a player list"""
-    if user in players:
-        players.remove( user )
-
-###############################################
 @bot.command()
 async def play( ctx, game = "werewolf"):
-    """"
-    simulate playing werewolf
-    """
-    gameState = {
-        # Village Team
-        "Seer": None,
-        "Witch": None,
-        "Village1": None,
-        "Village2": None,
-        # Werewolf Team
-        "Werewolf1": None,
-        "Werewolf2": None
-    }
-    has_Potion = True
-    has_Posion = True
-    ###############################################
-    async def wolfTurn():
-        pass
-
-    ###############################################
-    async def switchTurn():
-        pass
-
-    ###############################################
-    async def seerTurn():
-        pass
-
-    # extract info from players
-    global players
-    # if len(players) < 6:
-    #     await ctx.send( f"Not enough player\nCurrent player:{len(players)}")
-
-    # randomly assign role
-    for user in players:
-        await draw( user )
-
+    has_Heal    = True
+    has_Posion  = True
+    # assign users
+    # set the game State to all false first to for remaing roles
+    await six_ppl_game()      # reset to six people game in default
+    global players, discord_users, emojis, killed
+    seat_num = 1
+    for user in discord_users:
+        players.append( Player( user, await draw(user), seat_num, emojis[seat_num-1]))
+        seat_num += 1
     # time to confirm their role and ability
     await ctx.send("The game is starting. You have 30 seconds to confirm your roles.", tts=True)
-    time.sleep(15)
-    await ctx.send( "15 seconds" )
-    time.sleep(10)
-    for i in range(10, 0, -1):
-        await ctx.send( f"{i} seconds" )
-        time.sleep(1)
-
+    await ctx.send( "5 seconds" )
     # Going Dark
     await ctx.send( "Alright, everyone. Please close your eyes and go back to sleep. It is now nighttime." , tts=True)
-    time.sleep(5)
-    # /say "Will the Werewolves please wake up and choose their target for the night?"
-    time.sleep(5)
-    # /say "Will the Witch please wake up and choose whether to use their potion or not?"
-    time.sleep(5)
-    # /say "Will the Seer please wake up and choose someone to check?"
-    time.sleep(5)
-    # /say "Will all players please wake up? It is now nighttime."
-    time.sleep(5)
-    # /say "Good morning, everyone. It appears that no one was killed last night. Please continue your discussion and try to identify the Werewolves."
-    time.sleep(5)
-    # /say "Good morning, everyone. Last night, [name of player] was killed. Please discuss and try to identify the Werewolves."
-    time.sleep(5)
-    # vote
-    pass
 
+    
+    while isGameEnded == False:
+        await ctx.send(" Please close your eyes")
+        time.sleep(5)
+        await wolfTurn(ctx)
+        time.sleep(5)
+        await witchTurn(ctx, has_Heal, has_Posion)
+        time.sleep(5)
+        await seerTurn(ctx)
+        time.sleep(5)
+
+        # remove dead player from emoji
+        # set player death to True
+        dead_list = ''
+        for dead in killed:
+            emojis.remove(dead.emo)
+            dead.death = True
+            dead_list +=str(dead.user.name) + ","
+        # say who died
+        # morning_msg = 'No one died yesterday!' if not killed else f"Yesterday, {(dead.user.emo for dead in killed)} dead!"
+        if not killed:
+            morning_msg = '```No one died yesterday!```'
+        else:
+            morning_msg = f'```Yesterday, {dead_list} got killed```'
+        await ctx.send(morning_msg, tts=True)
+        
+
+        # pick a random people if no one died\
+        speak_index = random.randint( 1, len(emojis) - 1 )
+        msg = f"Please start with player {emojis[speak_index]} for speaking"
+        await ctx.send(msg, tts=True)
+        killed = [] # empty killed
+        # vote state
+        await waitToVote(ctx, user)
+        # determine win state
+        msg = await determineWinningState(ctx)
+        await ctx.send(msg, tts=True)
+        for player in players:
+            player.mostVote = False
+    
+    await ctx.send("GAME IS ENDED")
+    return
+
+
+async def waitToVote(ctx, user):
+    def check(reaction, user):
+        return str(reaction.emoji) in ["👍"] and user != bot.user
+    
+    poll_message = "React with 👍 when you guys are ready to vote"
+    poll = await ctx.send(poll_message)
+    await poll.add_reaction("👍")
+
+    reaction, user = await bot.wait_for('reaction_add', check=check)
+    if str(reaction.emoji) == "👍":
+        poll_message = "A poll is sending to each survivor"
+        await ctx.send(poll_message, tts=True)
+        isVotedMoreThanOnce = False
+        await vote(ctx, isVotedMoreThanOnce, user)
+    return
+
+
+async def callVote(ctx, user, isVotedMoreThanOnce):
+    voteResult = []     # for message
+    seat_freq = {}
+    for player in players:
+        if player.death == False and player.mostVote == False:
+            vote_seat, vote_msg = await gatherVotes(ctx, player, isVotedMoreThanOnce)
+            voteResult.append(vote_msg)
+
+            if vote_seat in seat_freq:
+                seat_freq[vote_seat] += 1
+            elif vote_seat == 0:
+                continue
+            else:
+                seat_freq[vote_seat] = 1
+    
+    max_freq = max(seat_freq.values())
+    most_vote = []
+    for seat, freq in seat_freq.items():
+        if(freq == max_freq):
+            most_vote.append(seat)
+    voteResult.append(f"The player(s) with most votes: {most_vote}")
+    msg = "```Here are vote results of today: \n"
+    for voteMsg in voteResult:
+        msg += voteMsg + "\n"
+    msg += "```"
+    await ctx.send(msg)
+    return most_vote
+    
+
+async def vote(ctx, isVotedMoreThanOnce, user):
+    most_vote = await callVote(ctx, user, isVotedMoreThanOnce)
+
+    if len(most_vote) > 1 and isVotedMoreThanOnce == False:
+        # vote once more time
+        msg = "There are more than one player with most votes, please vote one more time"
+        await ctx.send(msg, tts=True)
+        isVotedMoreThanOnce = True
+        for num in most_vote:
+            for player in players:
+                if num == player.seat:
+                    player.mostVote = True
+        
+        await vote(ctx, isVotedMoreThanOnce, user)
+    elif isVotedMoreThanOnce == True and len(most_vote) > 1:
+        msg = "There are still more than one player with most votes, so there is no one die today"
+        await ctx.send(msg, tts=True)
+    elif len(most_vote) == 1:
+        msg = f"Number {most_vote}, you are voted to be killed. Please say your last words"
+        await ctx.send(msg, tts=True)
+        msg = "Please react 😇 when you finished your speech"
+        poll = await ctx.send(msg)
+        await poll.add_reaction("😇")
+        def check(reaction, user):
+            return user != bot.user and str(reaction.emoji) == "😇" 
+        reaction, user = await bot.wait_for('reaction_add', check=check)
+        msg = "Thank you for your amazing speech. You are now time to die"
+        await ctx.send(msg, tts=True)
+        chosen_player = None
+        # Kill the player
+        for player in players:
+            if most_vote == player.seat:
+                chosen_player = player
+        emojis.remove(chosen_player.emo)
+        chosen_player.death = True
+    else: 
+        print("Error: vote(ctx, isVotedMoreThanOnce, user) function error")
+    return
+
+
+async def gatherVotes(ctx, player, isVotedMoreThanOnce):    
+    msg = f"```Player Number:  {player.emo}\n"    
+    msg += "Please vote to player to kill or React 🚫 to not vote```"
+    dm_channel = await player.user.create_dm()
+    poll = await dm_channel.send(msg)
+
+    # create a temp emojis
+    global emojis
+    remaining_emojis = []
+    for player in players:
+        if isVotedMoreThanOnce == False:
+            if player.death == False:
+                remaining_emojis.append(player.emo)
+        else:
+            if player.death == False and player.mostVote == True:
+                remaining_emojis.append(player.emo)
+    
+    remaining_emojis.append("🚫")
+
+    for emo in remaining_emojis:
+        await poll.add_reaction(emo)
+
+    # wait for pick and kill
+    def check(reaction, user):
+        return user != bot.user and str(reaction.emoji) in remaining_emojis 
+
+    reaction, player = await bot.wait_for('reaction_add', check=check)
+    chosen_player = None
+    for player in players:
+        if player.emo == str(reaction.emoji) and player.death == False:
+            chosen_player = player
+            break
+    
+    msg = ""
+    if str(reaction.emoji) == "🚫":
+        msg = "Okay, your vote is corrected!"
+        return_msg = f"{player.emo} ➡️ 🚫"
+        dm_channel = await player.user.create_dm()
+        await dm_channel.send(msg)
+        return 0, return_msg
+    else: 
+        msg = "Okay, your vote is gathered and sent. Hope he/she die today!!"
+    dm_channel = await player.user.create_dm()
+    await dm_channel.send(msg)
+    return_msg = f"{player.emo} ➡️ {chosen_player.emo}"
+    return chosen_player.seat, return_msg
+
+
+async def determineWinningState(ctx):
+    wolf_count = 0
+    good_count = 0
+    global isGameEnded
+    for player in players:
+        if player.death == False:
+            if player.role.startswith("Werewolf"):
+                wolf_count += 1
+            else:
+                good_count += 1
+    if wolf_count == 0:
+        msg = "Congratulations! Humans Win!"
+        isGameEnded = True
+    elif wolf_count >= good_count:
+        msg = "Congratulations! Werewolfs Win!"
+        isGameEnded = True
+    else:
+        msg = "Game is continued. Now we are time to sleep"
+        isGameEnded = False
+    return msg
+    
+
+async def six_ppl_game():
+    global roles, emojis, killed,isGameEnded
+    roles = [ "Seer", "Witch", "Village1","Village2","Werewolf1","Werewolf2"]
+    emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]
+    killed = []
+    isGameEnded = False
+
+async def wolfTurn(ctx):
+    # pick wolf voter
+    werewolfVoter = next(player for player in players if player.role.startswith("Werewolf"))
+    # send group message
+    await ctx.send(f"Werewolf, please wake up", tts=True)
+
+    # send private message
+    poll_message = f"```You are the Werewolf voter. Please select a player to kill```"
+    dm_channel = await werewolfVoter.user.create_dm()
+    poll = await dm_channel.send(poll_message)
+
+
+    global emojis
+    for emoji in emojis:
+        await poll.add_reaction(emoji)
+    # wait for pick and kill
+    def check(reaction, werewolfVoter):
+        return werewolfVoter != bot.user and str(reaction.emoji) in emojis
+
+    reaction, werewolfVoter = await bot.wait_for('reaction_add', check=check)
+    chosen_player = None
+    for player in players:
+        if player.emo == str(reaction.emoji):
+            chosen_player = player
+            break
+    
+    if chosen_player is None:
+        await ctx.send("Error: couldn't find player with chosen emoji")
+        return
+    
+    global killed
+    killed.append(chosen_player)
+    await ctx.send(f"Ok I got it, please close your eyes", tts=True)
+    return
+
+async def witchTurn(ctx, has_Heal, has_Posion):
+    witch = next( player for player in players if player.role == "Witch")
+
+    async def use_heal():
+        nonlocal witch
+        global killed
+        theDeath = killed[0]
+        
+        # message and poll reaction
+        witch_dm = await witch.user.create_dm()
+        msg = f"```Do you want to use heal potion for Player {theDeath.emo}?\nPress 👍 for YES\nPress 🔙 to go back```"
+        private_msg = await witch_dm.send(msg)
+        await private_msg.add_reaction("👍")
+        await private_msg.add_reaction("🔙")
+
+        def check( reaction, user ):
+            return user == witch.user and str(reaction.emoji) in ["👍", "🔙"]
+        
+        while True:
+            reaction, _ = await bot.wait_for("reaction_add", check=check)
+            if str(reaction.emoji) == "👍":
+                killed.pop()
+                return True
+            elif str(reaction.emoji) == "🔙":
+                return False     
+                
+    async def use_posion():
+        nonlocal witch
+        witch_dm = await witch.user.create_dm()  # create dm with witch
+        poll_message = f"```Hello Witch!\nDo you want to use poison ?\nSelect a player number to use your posion\n"
+        poll_message += "Select 🔙 to go back```"
+        poll = await witch_dm.send(poll_message)
+        
+        for emo in emojis:
+            await poll.add_reaction(emo)
+        await poll.add_reaction("🔙")
+        # get reaction, assume always kill one player
+        reaction, user = await bot.wait_for('reaction_add')
+        if user != bot.user and reaction.emoji == "🔙":
+            return False
+        if user != bot.user and str(reaction.emoji) in emojis:
+            chosen_player = next( player for player in players if player.emo == reaction.emoji)
+            global killed
+            killed.append(chosen_player)
+            return True
+      
+    async def action():
+        # list of potion
+        nonlocal has_Heal, has_Posion, witch
+        potions_reactions = ["🙅🏻‍♂️"]
+        if has_Heal:
+            potions_reactions.append("💊")
+        if has_Posion:
+            potions_reactions.append("🧪")
+
+        async def prompt():
+            # send prompt
+            nonlocal potions_reactions, witch
+            to_witch_message = "```Do you want to use heal potion, posion potion, or do nothing?\n"
+            to_witch_message += "💊 for Heal\n🧪 for Posion\n🙅🏻‍♂️ to do Nothing```"
+            witch_dm = await witch.user.create_dm()
+            private_msg = await witch_dm.send(to_witch_message)
+            # add potions reactions
+            for choice in potions_reactions:
+                await private_msg.add_reaction(choice)
+
+
+
+        # choice action
+        acted = False
+        while not acted:
+            await prompt()
+            reaction, user = await bot.wait_for('reaction_add')
+            if user != bot.user and reaction.emoji == "🙅🏻‍♂️":
+                return 0
+            elif user != bot.user and reaction.emoji == "💊":
+                acted = await use_heal()
+                has_Heal = not acted
+            elif user != bot.user and reaction.emoji == "🧪":
+                acted = await use_posion()
+                has_Posion = not acted
+
+    msg = "Witch, please wake up"
+    await ctx.send(msg, tts = True)
+
+    if witch.death:
+        time.sleep(random.randint( 5, 15 ))
+    else:
+        await action()
+    await ctx.send(f"Ok I got it, please close your eyes", tts=True)
+    return
+
+async def seerTurn(ctx):
+    seer = next( player for player in players if player.role == "Seer")
+    msg = f"Seer, please wake up"
+    await ctx.send(msg, tts=True)
+    
+    async def see_role():
+        nonlocal seer
+        # send private message
+        poll_message = f"```Hello Seer!\nSelect a number to check the player's identity```"
+        dm_channel = await seer.user.create_dm()
+        poll = await dm_channel.send(poll_message)
+
+        # create a temp emojis
+        remaining_emojis = []
+        for player in players:
+            remaining_emojis.append(player.emo)
+            await poll.add_reaction(player.emo)
+
+        # wait for pick and kill
+        def check(reaction, user):
+            return user != bot.user and str(reaction.emoji) in remaining_emojis
+
+        reaction, seer = await bot.wait_for('reaction_add', check=check)
+        chosen_player = None
+        for player in players:
+            if player.emo == str(reaction.emoji):
+                chosen_player = player
+                break
+        
+        if chosen_player is None:
+            await ctx.send("Error: couldn't find player with chosen emoji")
+            return
+        
+        if chosen_player.role.startswith("Werewolf"):
+            role_msg = f"This player's role is BAD"
+        else:
+            role_msg = f"This player's role is GOOD"
+        await dm_channel.send(role_msg)
+       
+    # handle case if seer died or not
+    if not seer.death:
+        await see_role()
+    else:
+        time.sleep(random.randint( 5, 15 ))
+    
+    await ctx.send(f"Ok Seer, I got it, please close your eyes", tts=True)
+    return
+    
+
+async def draw(user):
+    global roles
+    
+    if not roles:
+        print("ERROR: ROLES NOT ENOUGH")
+        return
+    
+    random_num = random.randint( 0, len(roles)-1 ) # get a random number
+    role = roles[random_num]    # extra role
+    roles.remove(role)          # remove role from global "roles"
+
+    print ( f"assigned {user.name} {role}" )    # debug statement
+    # 2) send private message to this player
+    if role != None:
+        await send_private_message( user,  f"Your role is {role}" )
+    return role
+
+async def send_private_message(user, message):
+    dm_channel = await user.create_dm()
+    await dm_channel.send(message)
+    
 
 if __name__ == '__main__':
     bot.run(BOT_TOKEN)
