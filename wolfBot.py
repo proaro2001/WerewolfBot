@@ -9,7 +9,7 @@ from discord.ext import commands
 import discord
 import random
 import time
-
+ 
 
 class Player:
     def __init__(self, user, role=None, seat=0, emo=None):
